@@ -36,11 +36,21 @@ Function Verify-Path ([string]$mypath) {
 }
 
 if (! $Openvpn) {
-    $Openvpn = "C:\Program Files\OpenVPN\bin\openvpn.exe"
+    $r = [Microsoft.Win32.RegistryKey]::OpenBaseKey([Microsoft.Win32.RegistryHive]::LocalMachine, 
+                                                    [Microsoft.Win32.RegistryView]::Default)
+
+    $subkey = $r.OpenSubKey('Software\Openvpn')
+
+    $v = if( $subkey.Count -gt 0 ){
+          $subkey.GetValue('exe_path')
+    }else{
+          [io.path]::combine($env:ProgramFiles, 'OpenVPN', 'bin', 'openvpn.exe')
+    }
+
 }
 
 if (! $Gui) {
-    $Gui = "C:\Program Files\OpenVPN\bin\openvpn-gui.exe"
+    $Gui = [io.path]::combine($env:ProgramFiles, 'OpenVPN', 'bin', 'openvpn-gui.exe')
 }
 
 if (! ($Config -and $Ping) -or $Help) {
