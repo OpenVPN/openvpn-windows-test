@@ -43,13 +43,6 @@ Note that right now OpenVPN might mess up IPv6 routes if OpenVPN instances are
 killed forcibly, as this script does in most cases. This can cause IPv6 ping
 tests to fail after an initial connection.
 
-If you want the script to signal openvpn.exe before killing after the test, add
-
-    management 127.0.0.1 58581
-
-to your (test) OpenVPN configuration file. This approach will only work when
-the script is launched with -TestCmdexe.
-
 Scope of the tests
 ==================
 

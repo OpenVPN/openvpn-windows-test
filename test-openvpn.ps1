@@ -144,7 +144,7 @@ Function Test-Cmdexe {
 
     $bat = "${Configname}.bat"
     $pidfile = "${cwd}\${Configname}.pid"
-    Set-Content -Path "${bat}" -Value """${Openvpn}"" --config ""${config}"" --writepid ""${pidfile}"" --cd ""${Configdir}"" & exit"
+    Set-Content -Path "${bat}" -Value """${Openvpn}"" --management 127.0.0.1 58581 --config ""${config}"" --writepid ""${pidfile}"" --cd ""${Configdir}"" & exit"
     Start-Process -FilePath $env:ComSpec -ArgumentList "/c", "start", "${bat}"
     Check-Connectivity "cmdexe" $ping
     Stop-Management
