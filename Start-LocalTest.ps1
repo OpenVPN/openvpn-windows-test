@@ -14,7 +14,8 @@ param (
 $OPENVPN_EXE = "c:\Program Files\OpenVPN\bin\openvpn.exe"
 $REMOTE = "conn-test-server.openvpn.org"
 
-$BASE_P2MP="--client --tls-cert-profile insecure --ca $CA --cert $CERT --key $KEY --remote-cert-tls server --verb 3 --setenv UV_NOCOMP 1 --push-peer-info --management 127.0.0.1 58581"
+$MANAGEMENT_PORT="58581"
+$BASE_P2MP="--client --tls-cert-profile insecure --ca $CA --cert $CERT --key $KEY --remote-cert-tls server --verb 3 --setenv UV_NOCOMP 1 --push-peer-info --management 127.0.0.1 $MANAGEMENT_PORT"
 
 $PING4_HOSTS_1=@("10.194.1.1", "10.194.0.1")
 $PING6_HOSTS_1=@("fd00:abcd:194:1::1", "fd00:abcd:194:0::1")
@@ -90,35 +91,47 @@ $ALL_TESTS = [ordered]@{
 
 function Test-ConnectionMs([switch]$IPv4, [switch]$IPv6, [array]$Hosts, $Count=20, $Delay=250) {
     $(64, 1440, 3000) | ForEach-Object {
-        Write-Host "Ping ""$Hosts"" $Count times with $_ bytes..."
+        $bufferSize = $_
+        Write-Host "Ping ""$Hosts"" $Count times with $bufferSize bytes..."
+
         # failures per host
-        $nFailures = New-Object int[] $Hosts.Length
-        for ($i = 0; $i -lt $Count; ++$i) {
-            # this returns bool array, item per host
-            $ts1 = Get-Date
-            $arr = Test-Connection -TargetName $Hosts -IPv4:$IPv4 -IPv6:$IPv6 -Count 1 -BufferSize $_ -Quiet
-            for ($j = 0; $j -lt $arr.Length; ++$j) {
-                if (!$arr[$j])
-                {
-                    ++$nFailures[$j]
-                }
-            }
-            $ts2 = Get-Date
-            $neededDelay = $Delay - (($ts2 - $ts1).TotalMilliseconds)
-            if ($neededDelay -gt 0)
-            {
-                Start-Sleep -Milliseconds $neededDelay
-            }
+        $failuresPerHost = [hashtable]::Synchronized(@{ })
+        foreach ($h in $Hosts) {
+            $failuresPerHost[$h] = 0
         }
 
-        # test failed if all pings have failed
-        for ($i = 0; $i -lt $Hosts.Length; ++$i) {
-            if ($nFailures[$i] -eq $Count) {
-                throw "ping $($Hosts[$i]) failed"
-            } elseif ($nFailures[$i] -gt 0) {
+        for ($i = 0; $i -lt $Count; ++$i) {
+            # this is because we have nested scope, Invoke-Command and Parallel
+            # see https://stackoverflow.com/questions/57700435/usingvar-in-start-job-within-invoke-command
+            $pingPerHost = [scriptblock]::Create(
+@'
+            $startTime = Get-Date
+            $ok = Test-Connection -TargetName $_ -IPv4:$using:IPv4 -IPv6:$using:IPv6 -Count 1 -BufferSize $using:bufferSize -Quiet
+            if (!$ok) {
+                $fph = $using:failuresPerHost
+                ++$fph[$_]
+            }
+            $endTime = Get-Date
+            $neededDelay = $Delay - (($endTime - $startTime).TotalMilliseconds)
+            # sleep if ping took less time than passed $Delay value
+            if ($neededDelay -gt 0) {
+                Start-Sleep -Milliseconds $neededDelay
+            }
+'@
+            )
+
+            # ping hosts in parallel
+            $hosts | ForEach-Object -Parallel $pingPerHost
+        }
+
+        foreach ($en in $failuresPerHost.GetEnumerator()) {
+            # test failed if all pings have failed
+            if ($en.Value -eq $Count) {
+                throw "ping $en.Key failed"
+            } elseif ($en.Value -gt 0) {
                 # print failure rate if some pings have failed
-                $rate = ($nFailures[$i] / $Count).ToString("0.00")
-                Write-Host "failure rate for $($Hosts[$i]): $rate"
+                $rate = ($en.Value / $Count).ToString("0.00")
+                Write-Host "failure rate for $($en.Key): $rate"
             }
         }
     }
@@ -134,7 +147,7 @@ function Test-Pings ([array]$hosts4, [array]$hosts6) {
 }
 
 Function Stop-OpenVPN {
-    $socket = New-Object System.Net.Sockets.TcpClient("127.0.0.1", "58581")
+    $socket = New-Object System.Net.Sockets.TcpClient("127.0.0.1", $MANAGEMENT_PORT)
 
     if ($socket) {
         $Stream = $Socket.GetStream()
@@ -181,15 +194,16 @@ function Start-OpenVPN ([string]$TestId, [string]$Conf, [string]$Driver) {
     Write-Error "Cannot establish VPN connection" -ErrorAction Stop
 }
 
-function Start-SingleDriverTests([string]$Driver) {
-    $passed = @()
-    $failed = @()
+function Start-SingleDriverTests([string]$Drv) {
+    $passed = [String[]]@()
+    $failed = [String[]]@()
     if ($Tests -eq "All") {
         $tests_to_run = $ALL_TESTS.Keys
     } else {
         $tests_to_run = $Tests
     }
-    Write-Host "`r`nWill run tests $($tests_to_run -join ",") using driver $Driver"
+
+    Write-Host "`r`nWill run tests $($tests_to_run -join ",") using driver $Drv"
     foreach ($t in $tests_to_run) {
         if (!$ALL_TESTS.Contains($t)) {
             Write-Error "Test $t is missing"
@@ -197,15 +211,15 @@ function Start-SingleDriverTests([string]$Driver) {
         }
 
         $test = $ALL_TESTS[$t]
-        Write-Host "Running Test $t ($($Test.Title))"
+        Write-Host "Running Test $t ($($test.Title))"
 
         try {
-            Start-OpenVPN -TestId $t -Conf $test.Conf -Driver $Driver
+            Start-OpenVPN -TestId $t -Conf $test.Conf -Driver $Drv
 
             # give some time for network settings to settle
             Start-Sleep -Seconds 3
 
-            Test-Pings $Test.Ping4Hosts $Test.Ping6Hosts
+            Test-Pings $test.Ping4Hosts $test.Ping6Hosts
             Write-Host "PASS`r`n"
             $passed += ,$t
         }
@@ -220,7 +234,6 @@ function Start-SingleDriverTests([string]$Driver) {
 
     return [System.Tuple]::Create($passed, $failed)
 }
-
 
 $results = @()
 if ($Driver -eq "All") {
