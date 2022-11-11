@@ -1,3 +1,5 @@
 *.ovpn
 *.pid
 run.ps1
+*.log
+*.msi
