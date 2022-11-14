@@ -8,7 +8,8 @@ param (
     [ValidateSet("Default", "OvpnDco", "Wintun", "TapWindows6", "All")]
     [string]$Driver = "All",
 
-    [string[]]$Tests = "All"
+    [string[]]$Tests = "All",
+    [string]$InstanceName = "openvpn2-win-ta"
 )
 
 $INSTANCE_TYPE = "t3.small"
@@ -43,10 +44,44 @@ function Start-TestMachine() {
     # Start AWS instance
     Write-Host "Starting instance"
 
+    $tags = @(
+        @{
+            Key="Name"
+            Value=$InstanceName
+        }
+        @{
+            Key="Created-By"
+            Value="Powershell/OpenVPN/openvpn-windows-test"
+        }
+        @{
+            Key="Owner"
+            Value="Core team"
+        }
+        @{
+            Key="Maintainer"
+            Value="Lev Stipakov"
+        }
+        @{
+            Key="Task Group"
+            Value="Community"
+        }
+        @{
+            Key="Environment"
+            Value="Test"
+        }
+    )
+    $tagSpec = New-Object Amazon.EC2.Model.TagSpecification
+    $tagSpec.ResourceType = "instance"
+
+    foreach($tag in $tags) {
+        $tagSpec.Tags.Add($tag)
+    }
+
     $instId = (New-EC2Instance `
         -ImageId $IMAGE_ID `
         -InstanceType $INSTANCE_TYPE `
         -SubnetId $SUBNET_ID `
+        -TagSpecification $tagSpec `
         -SecurityGroupId $SECURITY_GROUPS).Instances[0].InstanceId
 
     Write-Host "Instance $instId started"
