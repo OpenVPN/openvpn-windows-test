@@ -186,8 +186,12 @@ function Start-OpenVPN ([string]$TestId, [string]$Conf, [string]$Driver) {
 
     for ($i = 0; $i -le 30; ++$i) {
         Start-Sleep -Seconds 1
-        if (Select-String -Pattern "Initialization Sequence Completed" -Path $logFile) {
+        if (!(Test-Path $logFile)) {
+            Write-Host "Waiting for log $logFile to appear..."
+        } elseif (Select-String -Pattern "Initialization Sequence Completed" -Path $logFile) {
             return
+        } else {
+            Write-Host "Waiting for connection to be established..."
         }
     }
 
