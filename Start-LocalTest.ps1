@@ -8,7 +8,11 @@ param (
     [string]$CERT = "c:\Temp\openvpn2_ta\lev-tclient.crt",
     [string]$KEY = "c:\Temp\openvpn2_ta\lev-tclient.key",
 
-    [string[]]$Tests = "All"
+    [string[]]$Tests = "All",
+
+    # use "Return" instead of "exit" at the end of execution, useful when called from Invoke-Command
+    # (cannot use switch parameter with Invoke-Command -FilePath -ArgumentList)
+    [int]$SuppressExit = 0
 )
 
 $OPENVPN_EXE = "c:\Program Files\OpenVPN\bin\openvpn.exe"
@@ -127,7 +131,7 @@ function Test-ConnectionMs([switch]$IPv4, [switch]$IPv6, [array]$Hosts, $Count=2
         foreach ($en in $failuresPerHost.GetEnumerator()) {
             # test failed if all pings have failed
             if ($en.Value -eq $Count) {
-                throw "ping $en.Key failed"
+                throw "ping $($en.Key) failed"
             } elseif ($en.Value -gt 0) {
                 # print failure rate if some pings have failed
                 $rate = ($en.Value / $Count).ToString("0.00")
@@ -251,7 +255,18 @@ if ($Driver -eq "All") {
     $results += ,[System.Tuple]::Create($Driver, $r.Item1, $r.Item2)
 }
 
+$exitcode = 0
 Write-Host "`r`nSUMMARY:"
 foreach ($r in $results) {
     Write-Host "Driver $($r.Item1)`r`nPassed: $($r.Item2)`r`nFailed: $($r.Item3)`r`n"
+    if ($r.Item3) {
+        $exitcode = 1
+    }
+}
+
+if ($SuppressExit) {
+    return $exitcode
+}
+else {
+    exit $exitcode
 }

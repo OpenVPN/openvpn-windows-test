@@ -125,6 +125,7 @@ function Get-Logs($IP, $Sess) {
     scp -i $SSH_KEY administrator@${IP}:openvpn-logs.zip .
 }
 
+$exitcode = 0
 try {
     Set-DefaultAWSRegion -Region $REGION
 
@@ -136,11 +137,11 @@ try {
 
     Install-MSI -IP $ip -Sess $sess
     Test-Install -IP $ip -Sess $sess
-    Invoke-Command -Session $sess -FilePath Start-LocalTest.ps1 -ArgumentList @($Driver, "C:\TA\ca.crt", "C:\TA\t_client.crt", "C:\TA\t_client.key", $Tests)
+    $exitcode = Invoke-Command -Session $sess -FilePath Start-LocalTest.ps1 -ArgumentList @($Driver, "C:\TA\ca.crt", "C:\TA\t_client.crt", "C:\TA\t_client.key", $Tests, 1)
 }
 catch {
     Write-Host $_
-    exit 1
+    $exitcode = 1
 }
 finally {
     if ($sess) {
@@ -150,3 +151,5 @@ finally {
         Remove-Instance -InstId $instId
     }
 }
+
+exit $exitcode
