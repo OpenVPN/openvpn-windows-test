@@ -4,9 +4,12 @@ param (
     [ValidateSet("Default", "OvpnDco", "Wintun", "TapWindows6", "All")]
     [string]$Driver = "Default",
 
-    [string]$CA = "c:\Temp\openvpn2_ta\ca.crt",
-    [string]$CERT = "c:\Temp\openvpn2_ta\lev-tclient.crt",
-    [string]$KEY = "c:\Temp\openvpn2_ta\lev-tclient.key",
+    # use openvpn-gui and service to start/stop connections
+    [int]$UseGUI = 0,
+
+    [string]$CA = "c:/Temp/openvpn2_ta/ca.crt",
+    [string]$CERT = "c:/Temp/openvpn2_ta/lev-tclient.crt",
+    [string]$KEY = "c:/Temp/openvpn2_ta/lev-tclient.key",
 
     [string[]]$Tests = "All",
 
@@ -15,11 +18,24 @@ param (
     [int]$SuppressExit = 0
 )
 
+$OPENVPN_GUI_EXE = "c:\Program Files\OpenVPN\bin\openvpn-gui.exe"
 $OPENVPN_EXE = "c:\Program Files\OpenVPN\bin\openvpn.exe"
-$REMOTE = "conn-test-server.openvpn.org"
 
 $MANAGEMENT_PORT="58581"
-$BASE_P2MP="--client --tls-cert-profile insecure --ca $CA --cert $CERT --key $KEY --remote-cert-tls server --verb 3 --setenv UV_NOCOMP 1 --push-peer-info --management 127.0.0.1 $MANAGEMENT_PORT"
+
+$REMOTE = "conn-test-server.openvpn.org"
+
+$BASE_P2MP=@"
+client
+tls-cert-profile insecure
+ca $CA
+cert $CERT
+key $KEY
+remote-cert-tls server
+verb 3
+setenv UV_NOCOMP 1
+push-peer-info
+"@
 
 $PING4_HOSTS_1=@("10.194.1.1", "10.194.0.1")
 $PING6_HOSTS_1=@("fd00:abcd:194:1::1", "fd00:abcd:194:0::1")
@@ -33,61 +49,129 @@ $PING6_HOSTS_4=@("fd00:abcd:194:4::1", "fd00:abcd:194:0::1")
 $ALL_TESTS = [ordered]@{
     "1" = @{
         Title="tcp / p2pm / top net30"
-        Conf="$BASE_P2MP --dev tun --proto tcp4 --remote $REMOTE --port 51194"
+        Conf=@"
+$BASE_P2MP
+dev tun
+proto tcp4
+remote $REMOTE
+port 51194
+"@
         Ping4Hosts=$PING4_HOSTS_1
         Ping6Hosts=$PING6_HOSTS_1
     }
     "1a" = @{
         Title="tcp*6* / p2pm / top net30"
-        Conf="$BASE_P2MP --dev tun3 --proto tcp6-client --remote $REMOTE --port 51194 --server-poll-timeout 10"
+        Conf=@"
+$BASE_P2MP
+dev tun3
+proto tcp6-client
+remote $REMOTE
+port 51194
+server-poll-timeout 10
+"@
         Ping4Hosts=$PING4_HOSTS_1
         Ping6Hosts=$PING6_HOSTS_1
     }
     "2" = @{
         Title="udp / p2pm / top net30"
-        Conf="$BASE_P2MP --dev tun --proto udp4 --remote $REMOTE --port 51194"
+        Conf=@"
+$BASE_P2MP
+dev tun
+proto udp4
+remote $REMOTE
+port 51194
+"@
         Ping4Hosts=$PING4_HOSTS_2
         Ping6Hosts=$PING6_HOSTS_2
     }
     "2b" = @{
         Title="udp *6* / p2pm / top net30"
-        Conf="$BASE_P2MP --dev tun --proto udp6 --remote $REMOTE --port 51194"
+        Conf=@"
+$BASE_P2MP
+dev tun
+proto udp6
+remote $REMOTE
+port 51194
+"@
         Ping4Hosts=$PING4_HOSTS_2
         Ping6Hosts=$PING6_HOSTS_2
     }
     "2f" = @{
         Title="UDP / p2pm / top net30 / pull-filter -> ipv6-only"
-        Conf="$BASE_P2MP --dev tun --proto udp --remote $REMOTE --port 51194 --pull-filter accept ifconfig- --pull-filter ignore ifconfig"
+        Conf=@"
+$BASE_P2MP
+dev tun
+proto udp
+remote $REMOTE
+port 51194
+pull-filter accept ifconfig-
+pull-filter ignore ifconfig
+"@
         Ping4Hosts=@()
         Ping6Hosts=$PING6_HOSTS_2
     }
     "3" = @{
         Title="udp / p2pm / top subnet"
-        Conf="$BASE_P2MP --dev tun --proto udp4 --remote $REMOTE --port 51195"
+        Conf=@"
+$BASE_P2MP
+dev tun
+proto udp4
+remote $REMOTE
+port 51195
+"@
         Ping4Hosts=@("10.194.3.1", "10.194.0.1")
         Ping6Hosts=@("fd00:abcd:194:3::1", "fd00:abcd:194:0::1")
     }
     "4" = @{
         Title="udp(4) / p2pm / tap"
-        Conf="$BASE_P2MP --dev tap --proto udp4 --remote $REMOTE --port 51196 --route-ipv6 fd00:abcd:195::/48 fd00:abcd:194:4::ffff"
+        Conf=@"
+$BASE_P2MP
+dev tap
+proto udp4
+remote $REMOTE
+port 51196
+route-ipv6 fd00:abcd:195::/48 fd00:abcd:194:4::ffff
+"@
         Ping4Hosts=$PING4_HOSTS_4
         Ping6Hosts=$PING6_HOSTS_4
     }
     "4a" = @{
         Title="udp(6) / p2pm / tap3 / topo subnet"
-        Conf="$BASE_P2MP --dev tap3 --proto udp6 --remote $REMOTE --port 51196 --topology subnet"
+        Conf=@"
+$BASE_P2MP
+dev tap3
+proto udp6
+remote $REMOTE
+port 51196
+topology subnet
+"@
         Ping4Hosts=$PING4_HOSTS_4
         Ping6Hosts=$PING6_HOSTS_4
     }
     "4b" = @{
         Title="udp / p2pm / tap / ipv6-only (pull-filter) / MAC-Addr"
-        Conf="$BASE_P2MP --dev tap --proto udp --remote $REMOTE --port 51196 --pull-filter accept ifconfig- --pull-filter ignore ifconfig --lladdr 00:aa:bb:c0:ff:ee"
+        Conf=@"
+$BASE_P2MP
+dev tap
+proto udp
+remote $REMOTE
+port 51196
+pull-filter accept ifconfig-
+pull-filter ignore ifconfig
+lladdr 00:aa:bb:c0:ff:ee
+"@
         Ping4Hosts=@()
         Ping6Hosts=$PING6_HOSTS_4
     }
     "5" = @{
         Title="udp / p2pm / top net30 / ipv6 112"
-        Conf="$BASE_P2MP --dev tun --proto udp4 --remote $REMOTE --port 51197"
+        Conf=@"
+$BASE_P2MP
+dev tun
+proto udp4
+remote $REMOTE
+port 51197
+"@
         Ping4Hosts=@("10.194.5.1", "10.194.0.1")
         Ping6Hosts=@("fd00:abcd:194:5::1", "fd00:abcd:194:0::1")
     }
@@ -150,20 +234,32 @@ function Test-Pings ([array]$hosts4, [array]$hosts6) {
     }
 }
 
-Function Stop-OpenVPN {
-    $socket = New-Object System.Net.Sockets.TcpClient("127.0.0.1", $MANAGEMENT_PORT)
-
-    if ($socket) {
-        $Stream = $Socket.GetStream()
-        $Writer = New-Object System.IO.StreamWriter($Stream)
-
+Function Stop-OpenVPN([string]$ConfName) {
+    if ($ConfName -and $UseGUI) {
+        Write-Host "Stop openvpn via gui command"
+        & $OPENVPN_GUI_EXE --command disconnect $ConfName
         Start-Sleep -Seconds 1
-        $writer.WriteLine("signal SIGTERM")
-        $writer.Flush()
-        Start-Sleep -Seconds 3
     } else {
+        # if there is no gui, we stop openvpn via management
+        if (!$UseGUI) {
+            $socket = New-Object System.Net.Sockets.TcpClient("127.0.0.1", $MANAGEMENT_PORT)
+
+            if ($socket) {
+                Write-Host "Stop openvpn via management"
+                $stream = $socket.GetStream()
+                $writer = New-Object System.IO.StreamWriter($Stream)
+
+                Start-Sleep -Seconds 1
+                $writer.WriteLine("signal SIGTERM")
+                $writer.Flush()
+                Start-Sleep -Seconds 3
+                return
+            }
+        }
+
         $processes = (Get-Process|Where-Object { $_.ProcessName -eq "openvpn" })
         foreach ($process in $processes) {
+            Write-Host "Stop openvpn process $($process.Id)"
             Stop-Process $process.Id -Force
         }
     }
@@ -173,27 +269,51 @@ function Start-OpenVPN ([string]$TestId, [string]$Conf, [string]$Driver) {
     $windowsDriver = ""
     switch ($Driver) {
         "OvpnDco" {
-            $windowsDriver = " --windows-driver ovpn-dco"
+            $windowsDriver = "windows-driver ovpn-dco"
         }
         "TapWindows6" {
-            $windowsDriver = " --windows-driver tap-windows6"
+            $windowsDriver = "windows-driver tap-windows6"
         }
         "wintun" {
-            $windowsDriver = " --windows-driver wintun"
+            $windowsDriver = "windows-driver wintun"
         }
     }
-    $Conf += $windowsDriver
-    $logFile = "openvpn-$TestId-$Driver.log"
-    $Conf += " --log $logFile"
+    $Conf += "`n$windowsDriver"
+    $conf_name = "test_" + $TestId + "_$Driver"
+    $log_file = "$ENV:UserProfile\OpenVPN\log\$conf_name.log"
 
-    Start-Process -NoNewWindow -FilePath $OPENVPN_EXE -ArgumentList $Conf -ErrorAction Stop -RedirectStandardError error-$TestId-$Driver.log -RedirectStandardOutput output-$TestId-$Driver.log
+    $CONFIG_DIR = "$ENV:UserProfile\OpenVPN\config"
+    $LOG_DIR = "$ENV:UserProfile\OpenVPN\log"
+
+    New-Item -Path "$CONFIG_DIR" -type directory -Force | Out-Null
+    New-Item -Path "$LOG_DIR" -type directory -Force | Out-Null
+
+    # if we don't use gui, we need to specify log file and management for graceful shutdown
+    if (!$UseGUI) {
+        $Conf += "`nlog $log_file".Replace("\", "\\")
+        $Conf += "`nmanagement 127.0.0.1 $MANAGEMENT_PORT"
+    }
+
+    # write config to config dir
+    $Conf | Out-File "$CONFIG_DIR\\$conf_name.ovpn"
+
+    Remove-Item $log_file -ErrorAction Ignore
+
+    if ($UseGUI) {
+        & $OPENVPN_GUI_EXE --command rescan
+        Start-Sleep -Seconds 1
+
+        & $OPENVPN_GUI_EXE --connect $conf_name
+    } else {
+        Start-Process -NoNewWindow -FilePath $OPENVPN_EXE -ArgumentList "$CONFIG_DIR\\$conf_name.ovpn" -ErrorAction Stop -RedirectStandardError error-$TestId-$Driver.log -RedirectStandardOutput output-$TestId-$Driver.log
+    }
 
     for ($i = 0; $i -le 30; ++$i) {
         Start-Sleep -Seconds 1
-        if (!(Test-Path $logFile)) {
-            Write-Host "Waiting for log $logFile to appear..."
-        } elseif (Select-String -Pattern "Initialization Sequence Completed" -Path $logFile) {
-            return
+        if (!(Test-Path $log_file)) {
+            Write-Host "Waiting for log $log_file to appear..."
+        } elseif (Select-String -Pattern "Initialization Sequence Completed" -Path $log_file) {
+            return $conf_name
         } else {
             Write-Host "Waiting for connection to be established..."
         }
@@ -211,7 +331,12 @@ function Start-SingleDriverTests([string]$Drv) {
         $tests_to_run = $Tests
     }
 
-    Write-Host "`r`nWill run tests $($tests_to_run -join ",") using driver $Drv"
+    $gui = ""
+    if ($UseGUI) {
+        $gui = "and openvpn-gui / service"
+    }
+
+    Write-Host "`r`nWill run tests $($tests_to_run -join ",") using driver $Drv $gui"
     foreach ($t in $tests_to_run) {
         if (!$ALL_TESTS.Contains($t)) {
             Write-Error "Test $t is missing"
@@ -221,8 +346,10 @@ function Start-SingleDriverTests([string]$Drv) {
         $test = $ALL_TESTS[$t]
         Write-Host "Running Test $t ($($test.Title))"
 
+        $conf_name = ""
+
         try {
-            Start-OpenVPN -TestId $t -Conf $test.Conf -Driver $Drv
+            $conf_name = Start-OpenVPN -TestId $t -Conf $test.Conf -Driver $Drv
 
             # give some time for network settings to settle
             Start-Sleep -Seconds 3
@@ -236,7 +363,7 @@ function Start-SingleDriverTests([string]$Drv) {
             $failed += ,$t
         }
         finally {
-            Stop-OpenVPN
+            Stop-OpenVPN $conf_name
         }
     }
 
