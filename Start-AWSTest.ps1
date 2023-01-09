@@ -120,10 +120,7 @@ function Remove-Instance([string]$InstId) {
 }
 
 function Get-Logs($IP, $Sess) {
-    Invoke-Command -Session $sess -ScriptBlock {
-        Copy-Item -Path "$ENV:UserProfile\OpenVPN\log\*.log" -Destination "." -Recurse
-        Compress-Archive -Path "*.log" -DestinationPath "$HOME\openvpn-logs.zip"
-    }
+    Invoke-Command -Session $sess -ScriptBlock { Compress-Archive -Path "*.log" -DestinationPath "$HOME\openvpn-logs.zip" }
 
     scp -i $SSH_KEY administrator@${IP}:openvpn-logs.zip .
 }
@@ -140,7 +137,7 @@ try {
 
     Install-MSI -IP $ip -Sess $sess
     Test-Install -IP $ip -Sess $sess
-    $exitcode = Invoke-Command -Session $sess -FilePath Start-LocalTest.ps1 -ArgumentList @($Driver, 0, "C:/TA/ca.crt", "C:/TA/t_client.crt", "C:/TA/t_client.key", $Tests, 1)
+    $exitcode = Invoke-Command -Session $sess -FilePath Start-LocalTest.ps1 -ArgumentList @($Driver, "C:\TA\ca.crt", "C:\TA\t_client.crt", "C:\TA\t_client.key", $Tests, 1)
 }
 catch {
     Write-Host $_
