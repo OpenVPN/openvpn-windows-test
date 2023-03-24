@@ -122,6 +122,47 @@ port 51195
         Ping4Hosts=@("10.194.3.1", "10.194.0.1")
         Ping6Hosts=@("fd00:abcd:194:3::1", "fd00:abcd:194:0::1")
     }
+    "3a" = @{
+        Title="udp / p2pm / top subnet / dco-fail-on-pushed-comp-lzo"
+        ErrorMessage="ERROR: Failed to apply push options"
+        Driver="OvpnDco"
+        Conf=@"
+client
+tls-cert-profile insecure
+ca $CA
+cert $CERT
+key $KEY
+remote-cert-tls server
+verb 3
+dev tun
+proto udp4
+remote $REMOTE
+port 51195
+setenv UV_COMP_LZO no
+push-peer-info
+"@
+    }
+    "3b" = @{
+        Title="udp / p2pm / top subnet / accept-pushed-comp-lzo"
+        Driver="TapWindows6"
+        Conf=@"
+client
+tls-cert-profile insecure
+ca $CA
+cert $CERT
+key $KEY
+remote-cert-tls server
+verb 3
+dev tun
+proto udp4
+remote $REMOTE
+port 51195
+setenv UV_COMP_LZO no
+push-peer-info
+"@
+        Ping4Hosts=@("10.194.3.1", "10.194.0.1")
+        Ping6Hosts=@("fd00:abcd:194:3::1", "fd00:abcd:194:0::1")
+    }
     "4" = @{
         Title="udp(4) / p2pm / tap"
         Conf=@"
@@ -265,7 +306,7 @@ Function Stop-OpenVPN([string]$ConfName) {
     }
 }
 
-function Start-OpenVPN ([string]$TestId, [string]$Conf, [string]$Driver) {
+function Start-OpenVPN ([string] $ConfName, [string]$Conf, [string]$Driver, [string]$ErrorMessage) {
     $windowsDriver = ""
     switch ($Driver) {
         "OvpnDco" {
@@ -279,8 +320,7 @@ function Start-OpenVPN ([string]$TestId, [string]$Conf, [string]$Driver) {
         }
     }
     $Conf += "`n$windowsDriver"
-    $conf_name = "test_" + $TestId + "_$Driver"
-    $log_file = "$ENV:UserProfile\OpenVPN\log\$conf_name.log"
+    $log_file = "$ENV:UserProfile\OpenVPN\log\$ConfName.log"
 
     $CONFIG_DIR = "$ENV:UserProfile\OpenVPN\config"
     $LOG_DIR = "$ENV:UserProfile\OpenVPN\log"
@@ -295,7 +335,7 @@ function Start-OpenVPN ([string]$TestId, [string]$Conf, [string]$Driver) {
     }
 
     # write config to config dir
-    $Conf | Out-File "$CONFIG_DIR\\$conf_name.ovpn"
+    $Conf | Out-File "$CONFIG_DIR\\$ConfName.ovpn"
 
     Remove-Item $log_file -ErrorAction Ignore
 
@@ -303,23 +343,38 @@ function Start-OpenVPN ([string]$TestId, [string]$Conf, [string]$Driver) {
         & $OPENVPN_GUI_EXE --command rescan
         Start-Sleep -Seconds 1
 
-        & $OPENVPN_GUI_EXE --connect $conf_name
+        & $OPENVPN_GUI_EXE --connect $ConfName
     } else {
-        Start-Process -NoNewWindow -FilePath $OPENVPN_EXE -ArgumentList "$CONFIG_DIR\\$conf_name.ovpn" -ErrorAction Stop -RedirectStandardError error-$TestId-$Driver.log -RedirectStandardOutput output-$TestId-$Driver.log
+        Start-Process -NoNewWindow -FilePath $OPENVPN_EXE -ArgumentList "$CONFIG_DIR\\$ConfName.ovpn" -ErrorAction Stop -RedirectStandardError error-$ConfName.log -RedirectStandardOutput output-$ConfName.log
     }
 
     for ($i = 0; $i -le 30; ++$i) {
         Start-Sleep -Seconds 1
         if (!(Test-Path $log_file)) {
             Write-Host "Waiting for log $log_file to appear..."
-        } elseif (Select-String -Pattern "Initialization Sequence Completed" -Path $log_file) {
-            return $conf_name
         } else {
-            Write-Host "Waiting for connection to be established..."
+            if ($ErrorMessage) {
+                if (Select-String -Pattern $ErrorMessage -Path $log_file) {
+                    return
+                } else {
+                    Write-Host "Waiting for error message to appear..."
+                }
+            } else {
+                if (Select-String -Pattern "Initialization Sequence Completed" -Path $log_file) {
+                    return
+                } else {
+                    Write-Host "Waiting for connection to be established..."
+                }
+            }
         }
     }
 
-    Write-Error "Cannot establish VPN connection" -ErrorAction Stop
+    if ($ErrorMessage) {
+        Write-Error "Cannot find error message" -ErrorAction Stop
+    }
+    else {
+        Write-Error "Cannot establish VPN connection" -ErrorAction Stop
+    }
 }
 
 function Start-SingleDriverTests([string]$Drv) {
@@ -344,17 +399,25 @@ function Start-SingleDriverTests([string]$Drv) {
         }
 
         $test = $ALL_TESTS[$t]
+
+        if ($test.Driver -and ($Drv -ne $test.Driver)) {
+            Write-Warning "Skip test $t because it requires driver $($test.Driver)"
+            continue
+        }
+
         Write-Host "Running Test $t ($($test.Title))"
 
-        $conf_name = ""
-
         try {
-            $conf_name = Start-OpenVPN -TestId $t -Conf $test.Conf -Driver $Drv
+            $conf_name = "test_" + $t + "_$Drv"
+            Start-OpenVPN -ConfName $conf_name -Conf $test.Conf -Driver $Drv -ErrorMessage $test.ErrorMessage
 
-            # give some time for network settings to settle
-            Start-Sleep -Seconds 3
+            if (!$test.ErrorMessage) {
+                # give some time for network settings to settle
+                Start-Sleep -Seconds 3
 
-            Test-Pings $test.Ping4Hosts $test.Ping6Hosts
+                Test-Pings $test.Ping4Hosts $test.Ping6Hosts
+            }
+
             Write-Host "PASS`r`n"
             $passed += ,$t
         }
