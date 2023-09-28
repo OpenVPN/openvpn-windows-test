@@ -216,6 +216,20 @@ port 51197
         Ping4Hosts=@("10.194.5.1", "10.194.0.1")
         Ping6Hosts=@("fd00:abcd:194:5::1", "fd00:abcd:194:0::1")
     }
+    "6" = @{
+        Driver="TapWindows6"
+        Title="udp / p2pm / top subnet / --fragment 500"
+        Conf=@"
+$BASE_P2MP
+dev tun
+proto udp
+remote $REMOTE
+port 51198
+fragment 500
+"@
+        Ping4Hosts=@("10.194.6.1", "10.194.0.1")
+        Ping6Hosts=@("fd00:abcd:194:6::1", "fd00:abcd:194:0::1")
+    }
 }
 
 function Test-ConnectionMs([switch]$IPv4, [switch]$IPv6, [array]$Hosts, $Count=20, $Delay=250) {
