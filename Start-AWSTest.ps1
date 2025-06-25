@@ -73,6 +73,9 @@ function Start-TestMachine() {
     $tagSpec = New-Object Amazon.EC2.Model.TagSpecification
     $tagSpec.ResourceType = "instance"
 
+    # starting recently (?) tags are set to NULL and have to be initialized
+    $tagSpec.Tags = New-Object 'System.Collections.Generic.List[Amazon.EC2.Model.Tag]'
+
     foreach($tag in $tags) {
         $tagSpec.Tags.Add($tag)
     }
