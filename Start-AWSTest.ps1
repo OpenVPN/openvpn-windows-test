@@ -88,13 +88,20 @@ function Start-TestMachine() {
         -SecurityGroupId $SECURITY_GROUPS).Instances[0].InstanceId
 
     Write-Host "Instance $instId started"
+    Start-Sleep 5
 
     while ($true) {
-        $status = (Get-EC2InstanceStatus -InstanceId $instId).Status.Status
-        Write-Host "Checking status... " $status
-        if ($status -eq "ok") {
-            break
+        try {
+            $status = (Get-EC2InstanceStatus -InstanceId $instId).Status.Status
+            Write-Host "Checking status... " $status
+            if ($status -eq "ok") {
+                break
+            }
         }
+        catch [Amazon.EC2.AmazonEC2Exception] {
+            Write-Host "Exception: $_"
+        }
+
         Start-Sleep 5
     }
 
