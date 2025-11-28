@@ -297,7 +297,11 @@ Function Stop-OpenVPN([string]$ConfName) {
     if ($ConfName -and $UseGUI) {
         Write-Host "Stop openvpn via gui command"
         & $OPENVPN_GUI_EXE --command disconnect $ConfName
-        Start-Sleep -Seconds 1
+        $deadline = (Get-Date).AddSeconds(10)
+        while ((Get-Date) -lt $deadline) {
+            if (-not (Get-Process -Name openvpn -ErrorAction SilentlyContinue)) { break }
+            Start-Sleep 1
+        }
     } else {
         # if there is no gui, we stop openvpn via management
         if (!$UseGUI) {
