@@ -7,9 +7,7 @@ param (
     # use openvpn-gui and service to start/stop connections
     [int]$UseGUI = 0,
 
-    [string]$CA = "c:/Temp/openvpn2_ta/ca.crt",
-    [string]$CERT = "c:/Temp/openvpn2_ta/lev-tclient.crt",
-    [string]$KEY = "c:/Temp/openvpn2_ta/lev-tclient.key",
+    [string]$Config = "c:/Temp/t_client.inline",
 
     [string[]]$Tests = "All",
 
@@ -27,10 +25,7 @@ $REMOTE = "conn-test-server.openvpn.org"
 
 $BASE_P2MP=@"
 client
-tls-cert-profile insecure
-ca $CA
-cert $CERT
-key $KEY
+config $Config
 remote-cert-tls server
 verb 3
 setenv UV_NOCOMP 1
@@ -130,10 +125,7 @@ port 51195
         Driver="OvpnDco"
         Conf=@"
 client
-tls-cert-profile insecure
-ca $CA
-cert $CERT
-key $KEY
+config $Config
 remote-cert-tls server
 verb 3
 dev tun
@@ -149,10 +141,7 @@ push-peer-info
         Driver="TapWindows6"
         Conf=@"
 client
-tls-cert-profile insecure
-ca $CA
-cert $CERT
-key $KEY
+config $Config
 remote-cert-tls server
 verb 3
 dev tun

@@ -3,6 +3,7 @@
 
 param (
     [string]$SSH_KEY = "c:\Users\lev\.ssh\openvpn2_win_ta",
+    [string]$CONFIG_FILE = ".\t_client.inline",
     [string]$MSI_PATH = "OpenVPN-2.6git-amd64.msi",
 
     [ValidateSet("Default", "OvpnDco", "TapWindows6", "All")]
@@ -150,7 +151,8 @@ try {
 
     Install-MSI -IP $ip -Sess $sess
     Test-Install -IP $ip -Sess $sess
-    $exitcode = Invoke-Command -Session $sess -FilePath Start-LocalTest.ps1 -ArgumentList @($Driver, 1, "C:/TA/ca.crt", "C:/TA/t_client.crt", "C:/TA/t_client.key", $Tests, 1)
+    scp -i $SSH_KEY "$CONFIG_FILE" administrator@${IP}:C:/TA/t_client.inline
+    $exitcode = Invoke-Command -Session $sess -FilePath Start-LocalTest.ps1 -ArgumentList @($Driver, 1, "C:/TA/t_client.inline", $Tests, 1)
 }
 catch {
     Write-Host $_
