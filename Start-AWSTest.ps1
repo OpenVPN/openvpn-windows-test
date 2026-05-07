@@ -119,6 +119,12 @@ function Install-MSI($IP, $Sess) {
     Write-Host "Install MSI"
     $msiFileName = Split-Path "$MSI_PATH" -leaf
     Invoke-Command -Session $Sess -ArgumentList $msiFileName -ScriptBlock {
+        $sig = Get-AuthenticodeSignature -FilePath "$HOME\$args"
+        if ($sig.Status -ne 'Valid') {
+            Write-Host "MSI signature status: $($sig.Status)"
+            Write-Error "MSI signature is not valid" -ErrorAction Stop
+        }
+
         Start-Process msiexec.exe -Wait -ArgumentList @("/I", "$HOME\$args", "/quiet", "/L*V", "install.log")
     }
 }
