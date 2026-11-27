@@ -242,10 +242,19 @@ function Test-ConnectionMs([switch]$IPv4, [switch]$IPv6, [array]$Hosts, $Count=2
             $pingPerHost = [scriptblock]::Create(
 @'
             $startTime = Get-Date
-            $ok = Test-Connection -TargetName $_ -IPv4:$using:IPv4 -IPv6:$using:IPv6 -Count 1 -BufferSize $using:bufferSize -Quiet
+            $target = $_
+            # -Quiet only covers timeouts; other ping failures raise an error,
+            # which must not leak into the error stream of the caller
+            try {
+                $ok = Test-Connection -TargetName $target -IPv4:$using:IPv4 -IPv6:$using:IPv6 -Count 1 -BufferSize $using:bufferSize -Quiet -ErrorAction Stop
+            }
+            catch {
+                Write-Host "ping $target failed: $($_.Exception.Message)"
+                $ok = $false
+            }
             if (!$ok) {
                 $fph = $using:failuresPerHost
-                ++$fph[$_]
+                ++$fph[$target]
             }
             $endTime = Get-Date
             $neededDelay = $Delay - (($endTime - $startTime).TotalMilliseconds)
